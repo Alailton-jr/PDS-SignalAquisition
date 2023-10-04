@@ -7,13 +7,82 @@ enum mode{
 };
 
 uint16_t data[500];
-int16_t index;
+volatile uint16_t index;
 mode capMode;
 
 ISR(ADC_vect){
   data[index] = ADC + index*10;
   index++;
   if (index < 500) TIFR1 |= 0x01;
+}
+void ADC_Init();
+void Timer1_Init();
+void USART_Init(uint64_t baud_rate, uint8_t double_speed);
+
+int main(){
+
+  //Debug
+  Serial.begin(9600);
+
+  cli(); // disable global interrupts
+  // Configuration
+  PORTB = 0x00; // Set all ports to input
+  DDRB |= (1<< PB5) | (1<<PB0); // Set PB5 and PB0 to output
+  memset(data, 10, sizeof(data)); // Clear data array
+  index = 0; // Clear index
+  ADC_Init(); // Initialize ADC
+  Timer1_Init(); // Initialize Timer1
+  USART_Init(9600, 1); // Initialize USART
+
+  sei(); // enable global interrupts
+
+  uint8_t reading = 0;
+  capMode = NONE;
+  index = 0;
+  uint16_t i;
+  uint8_t *data2Send;
+
+  
+
+  while(1){ 
+
+    if (!reading){
+      while (!(UCSR0A & (1 << RXC0)));
+      if (UDR0 == '1'){
+        reading = 1;
+        capMode = VOLTAGE;
+        index = 0;
+        ADMUX &= ~(1 << MUX0);
+        TIFR1 |= 0x01;
+        PORTB |= (1<<PB5);
+      }
+    }
+    
+    if (reading){
+      if (index == 500){
+        // Serial.println("Sending data:");
+        for(i = 0; i < 500; i++) {
+          while(UCSR0A&0x20 == 0);
+          while ( !( UCSR0A & (1<<UDRE0)) )
+          UDR0 = (uint8_t)(data[i] >> 8);
+          while ( !( UCSR0A & (1<<UDRE0)) )
+          UDR0 = (uint8_t)(data[i]);
+        }
+        index = 0;
+        if (capMode == VOLTAGE){
+          capMode = CURRENT;
+          ADMUX &= ~(0 << MUX0);
+          ADMUX &= ~(1 << MUX1);
+          TIFR1 |= 0x01;
+        }
+        else if(capMode == CURRENT){
+          capMode = NONE;
+          reading = 0;
+          PORTB &= ~(1<<PB5);
+        }
+      }
+    }
+  }
 }
 
 void ADC_Init(){
@@ -73,54 +142,42 @@ void Timer1_Init(){
 
 }
 
-void printData(){
-  for (int i = 0; i < 500; i++)Serial.println(data[i]);
-}
+void USART_Init(uint64_t baud_rate, uint8_t double_speed) {
 
-int main(){
-
-  cli(); // disable global interrupts
-  // Configuration
-  PORTB = 0x00; // Set all ports to input
-  DDRB |= (1<< PB5) | (1<<PB0); // Set PB5 and PB0 to output
-  memset(data, 10, sizeof(data)); // Clear data array
-  index = 0; // Clear index
-  ADC_Init(); // Initialize ADC
-  Timer1_Init(); // Initialize Timer1
-  Serial.begin(9600); // Initialize Serial
-  sei(); // enable global interrupts
-
-  uint8_t reading = 0;
-  capMode = NONE;
-  index = 0;
-  uint16_t i;
-
-  while(1){ 
-    if (Serial.available()>0 && !reading){
-      char receivedByte = Serial.read();
-      if (receivedByte == '1'){
-          reading = 1;
-          capMode = CURRENT;
-          index = 0;
-          TIFR1 |= 0x01;
-          PORTB |= (1<<PB5);
-      }
-    }
-    if (reading){
-      if (index == 500){
-        for(i = 0; i < 500; i++) Serial.write(data[i]); // Ta errado
-        index = 0;
-        if (capMode == CURRENT){
-          capMode = VOLTAGE;
-          TIFR1 |= 0x01;
-        }
-        else if(capMode == VOLTAGE){
-          capMode = NONE;
-          reading = 0;
-          PORTB &= ~(1<<PB5);
-        }
-      }
-    }
+  uint16_t ubrr;
+  if (double_speed) {
+    ubrr = ((F_CPU + baud_rate * 4UL) / (baud_rate * 8UL) - 1);
+    UCSR0A |= (1 << U2X0);
+  } else {
+    ubrr = ((F_CPU + baud_rate * 8UL) / (baud_rate * 16UL) - 1);
   }
+
+  UBRR0 = ubrr;
+  
+
+  UCSR0B = 0;
+  UCSR0B |= (1 << RXEN0) | (1 << TXEN0); // Enable receiver and transmitter
+  UCSR0B |= (1 << RXCIE0); // Enable receiver interrupt
+
+
+  UCSR0C = (1 << UCSZ01) | (1 << UCSZ00); // Set frame: 8data, 1 stp
+
 }
 
+
+ISR(USART_RX_vect)
+{
+   char head_aux=head;
+   head_aux++;
+   if(head_aux==16) head_aux=0;
+   if(head_aux == tail) //verifica se RAM FIFO está cheia
+    {
+    head_aux = UDR0; //descarte do byte recebido (RAM FIFO cheia)
+    }
+   else
+    {
+    FIFO[head] = UDR0;  // lê byte recebido via serial e carrega na FIFO
+    head++;
+    if(head==16) head=0; // reset índice de cabeça (buffer circular)
+    }
+}
