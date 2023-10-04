@@ -1,34 +1,33 @@
 #include <Arduino.h>
 
+enum mode{
+  VOLTAGE,
+  CURRENT,
+  NONE
+};
 
-volatile int16_t data[500];
-volatile int16_t index;
+uint16_t data[500];
+int16_t index;
+mode capMode;
 
 ISR(ADC_vect){
-  if (index <500) TIFR1 |= 0x01;
-
-  data[index] = ADC;
-  index++; 
+  data[index] = ADC + index*10;
+  index++;
+  if (index < 500) TIFR1 |= 0x01;
 }
 
 void ADC_Init(){
 
-  // ADMUX – ADC Multiplexer Selection Register
-  // Bit       7     6     5     4     3     2     1     0
-  // (0x7C) REFS1 REFS0 ADLAR  –  MUX3  MUX2  MUX1  MUX0
-  // Init. Val. 0      0   0    0     0     0     0      0
-  // This code  0      1   0    0     0     0     0      0   -> AVCC with external capacitor at AREF pin
+  /*
+    ADC to measure Voltage and Current at 6kHz
+  */
 
+  // ADMUX – ADC Multiplexer Selection Register
   ADMUX = 0x00; // Clear ADMUX Register
   ADMUX |= (1 << REFS0); // AVCC Capacitor Externo at AREF pin
 
 
-  // ADCSRA – ADC Control and Status Register A
-  // Bit       7     6     5     4     3     2     1     0
-  // (0x81) ADEN ADSC ADATE ADIF ADIE ADPS2 ADPS1 ADPS0
-  // Init. Val. 0      0   0    0     0     0     0      0
-  // This code  1      0   1    0     1     1     1      1   -> Enable ADC; Start Conversion; Enable Auto Trigger; Enable Interrupt; Division Factor = 128
-
+  // ADCSRA – Enable ADC and Auto Trigger
   ADCSRA = 0x00; // Clear ADCSRA Register
   ADCSRA |= (1 << ADEN); // Enable ADC
   ADCSRA |= (1 << ADATE); // Enable Auto Trigger
@@ -38,72 +37,90 @@ void ADC_Init(){
   ADCSRA |=  (1 << ADPS1); 
   ADCSRA |=  (1 << ADPS0); 
 
+  // ADCSRB - Define Auto Trigger Source to Counter 1 Overflow
+  ADCSRB = 0x00;
+  ADCSRB |= (1 << ADTS1);
+  ADCSRB |= (1 << ADTS2); 
+
   DIDR0 = 0x01; // Disable Digital Input on ADC0
+
+  ADCSRA |= (1 << ADIE); // Enable Interrupt
+
 }
 
 void Timer1_Init(){
 
-  TCCR1A = 0x00;
-  TCCR1A |= WGM10;
-  TCCR1A=0x03;
+  /*
+    Timer configuration to trigger ADC
+  */
 
-  //---------------------------------------------------------------           
-  //TCCR1B – Timer/Counter1 Control Register B
-  //Bit       7     6     5     4     3     2     1     0
-  //(0x81) ICNC1 ICES1    –  WGM13 WGM12  CS12  CS11  CS10 
-  //Init. Val. 0      0   0    0     0     0     0      0
-  //This code  0      0   0    1     1     0     0      1   -> Waveform generation Mode=15 WGM=15 ->  WGM13:WGM12=11; clk_timer=clk_cpu/1=16MHz 
-  //---------------------------------------------------------------  
-  TCCR1B=0x19;
+  // TOP = OCR1A; Update of OCR1A at BOTTOM; TOV1 Flag Set on TOP
+  TCCR1A = 0x00; // Clear TCCR1A Register
+  TCCR1A |= (1 << WGM11); // Fast PWM 10-bit
+  TCCR1A |= (1 << WGM10); // Fast PWM 10-bit
+  TCCR1B = 0x00; // Clear TCCR1B Register 
+  TCCR1B |= (1 << WGM12); // Fast PWM 10-bit
+  TCCR1B |= (1 << WGM13); // Fast PWM 10-bit
 
+  // Clock Selection no Scale
+  TCCR1B |= (1 << CS10);
+
+  // Timer Cycle for 6kHz
+  OCR1A = 2666; // 16MHz/6kHz = 2666.6666666666666666666666666667
+
+  // No interrupted Used
+  TIMSK1 = 0x00;
+
+}
+
+void printData(){
+  for (int i = 0; i < 500; i++)Serial.println(data[i]);
 }
 
 int main(){
-    DDRB = 0x00;  // PORTB -> Todos para entrada
 
-    cli();
+  cli(); // disable global interrupts
+  // Configuration
+  PORTB = 0x00; // Set all ports to input
+  DDRB |= (1<< PB5) | (1<<PB0); // Set PB5 and PB0 to output
+  memset(data, 10, sizeof(data)); // Clear data array
+  index = 0; // Clear index
+  ADC_Init(); // Initialize ADC
+  Timer1_Init(); // Initialize Timer1
+  Serial.begin(9600); // Initialize Serial
+  sei(); // enable global interrupts
 
-    ADCSRA |= (1 << ADSC);
+  uint8_t reading = 0;
+  capMode = NONE;
+  index = 0;
+  uint16_t i;
 
-    sei();
-
-    float** current;
-    float** voltage;
-
-
-    while(1){ 
-      PORTB ^= 0x20;  //inverte PB5 (PORTB XOR PORTB)
-      _delay_ms(5000);//espera 1s (1000ms)
-
-
-
-    } 
+  while(1){ 
+    if (Serial.available()>0 && !reading){
+      char receivedByte = Serial.read();
+      if (receivedByte == '1'){
+          reading = 1;
+          capMode = CURRENT;
+          index = 0;
+          TIFR1 |= 0x01;
+          PORTB |= (1<<PB5);
+      }
+    }
+    if (reading){
+      if (index == 500){
+        for(i = 0; i < 500; i++) Serial.write(data[i]); // Ta errado
+        index = 0;
+        if (capMode == CURRENT){
+          capMode = VOLTAGE;
+          TIFR1 |= 0x01;
+        }
+        else if(capMode == VOLTAGE){
+          capMode = NONE;
+          reading = 0;
+          PORTB &= ~(1<<PB5);
+        }
+      }
+    }
+  }
 }
 
-
-
-
-
-
-
-
-// // put function declarations here:
-// int myFunction(int, int);
-
-// void setup() {
-//   // put your setup code here, to run once:
-//   // int result = myFunction(2, 3);
-//   pinMode(LED_BUILTIN, OUTPUT);
-// }
-
-// void loop() {
-//   digitalWrite(LED_BUILTIN, HIGH);
-//   delay(1000);
-//   digitalWrite(LED_BUILTIN, LOW);
-//   delay(1000);
-// }
-
-// // put function definitions here:
-// int myFunction(int x, int y) {
-//   return x + y;
-// }
