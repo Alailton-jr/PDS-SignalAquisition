@@ -1,17 +1,14 @@
 #include <Arduino.h>
 
 enum mode{
-  VOLTAGE,
-  CURRENT,
-  NONE
+  NONE = 0x00,
+  VOLTAGE = 0x01,
+  CURRENT = 0x02,
 };
 
-uint16_t data[500];
-volatile uint16_t index;
-volatile char lastChar;
-volatile uint8_t sent;
-mode capMode;
-
+volatile uint16_t data[500];
+volatile uint16_t index = 0;
+volatile char lastChar = 0;
 
 void ADC_Init();
 void Timer1_Init();
@@ -19,63 +16,69 @@ void USART_Init(uint64_t baud_rate, uint8_t double_speed);
 
 int main(){
 
-  cli(); // disable global interrupts
+  // Initialize
 
-  // Configuration
+  cli(); // disable global interrupts
   PORTB = 0x00; // Set all ports to input
-  DDRB |= (1<< PB5) | (1<<PB0); // Set PB5 and PB0 to output
-  memset(data, 10, sizeof(data)); // Clear data array
-  index = 0; // Clear index
+  DDRB = (1<< PB5); // Set PB5 and PB0 to output
   ADC_Init(); // Initialize ADC
   Timer1_Init(); // Initialize Timer1
-  USART_Init(9600, 1); // Initialize USART
-
-  sei(); // enable global interrupts
-
+  USART_Init(115200, 1); // Initialize USART
+  
+  // Local variables
   uint8_t reading = 0;
-  capMode = NONE;
-  index = 0;
+  mode capMode = NONE;
   uint16_t i;
-  lastChar = 0;
 
-  while(1){ 
-
-    if (!(reading) && lastChar == '1'){
+  // enable global interrupts
+  sei(); 
+  
+  // Main loop
+  while(1){
+    if (!(reading) && (lastChar == '1')){
       reading = 1;
       capMode = VOLTAGE;
       index = 0;
       lastChar = 0;
-      ADMUX &= ~(1 << MUX0);
-      TIFR1 |= 0x01;
-      PORTB |= (1<<PB5);
+      ADMUX |= (1 << MUX0); // Set ADC to measure voltage
+      ADMUX &= ~(1 << MUX1); // Set ADC to measure voltage
+      TIFR1 |= 0x01; // Clear Timer1 Overflow Flag
+      PORTB |= (1<<PB5); // Set PB5 to HIGH
     }
     if (reading){
+      // Send data to serial
       if (index == 500){
 
         for(i = 0; i < 500; i++) {
+          // break data into 8-bit chunks and send it to the serial port
           while (!(UCSR0A & (1 << UDRE0)));
-          UDR0 =  '1';//(uint8_t)(data[i] >> 8);
+          UDR0 =  (data[i]);
           while (!(UCSR0A & (1 << UDRE0)));
-          UDR0 =  '1';//(uint8_t)(data[i] >> 8);
+          UDR0 =  (data[i] >> 8); 
         }
-
+        
         index = 0;
+        // Change mode to current
         if (capMode == VOLTAGE){
           capMode = CURRENT;
-          ADMUX &= ~(0 << MUX0);
-          ADMUX &= ~(1 << MUX1);
+          ADMUX &= ~(1 << MUX0); // Set ADC to measure current
+          ADMUX |= (1 << MUX1); // Set ADC to measure current
           TIFR1 |= 0x01;
         }
+        // Stop reading
         else if(capMode == CURRENT){
           capMode = NONE;
           reading = 0;
-          PORTB &= ~(1<<PB5);
+          PORTB &= ~(1<<PB5); // Set PB5 to LOW
         }
       }
     }
   }
 }
 
+/*
+  @brief Initialize ADC
+*/
 void ADC_Init(){
 
   /*
@@ -85,7 +88,6 @@ void ADC_Init(){
   // ADMUX – ADC Multiplexer Selection Register
   ADMUX = 0x00; // Clear ADMUX Register
   ADMUX |= (1 << REFS0); // AVCC Capacitor Externo at AREF pin
-
 
   // ADCSRA – Enable ADC and Auto Trigger
   ADCSRA = 0x00; // Clear ADCSRA Register
@@ -108,6 +110,9 @@ void ADC_Init(){
 
 }
 
+/*
+  @brief Initialize Timer1
+*/
 void Timer1_Init(){
 
   /*
@@ -133,8 +138,14 @@ void Timer1_Init(){
 
 }
 
+/*
+  @brief Initialize USART
+  @param baud_rate Baud rate for USART
+  @param double_speed Double speed for USART
+*/
 void USART_Init(uint64_t baud_rate, uint8_t double_speed) {
 
+  // Find ubrr value for boud_rate and double_speed
   uint16_t ubrr;
   if (double_speed) {
     ubrr = ((F_CPU + baud_rate * 4UL) / (baud_rate * 8UL) - 1);
@@ -142,17 +153,19 @@ void USART_Init(uint64_t baud_rate, uint8_t double_speed) {
   } else {
     ubrr = ((F_CPU + baud_rate * 8UL) / (baud_rate * 16UL) - 1);
   }
-  UBRR0 = ubrr;
+
+
+  UBRR0 = ubrr; // Set baud rate
 
   UCSR0B = 0;
   UCSR0B |= (1 << RXEN0) | (1 << TXEN0); // Enable receiver and transmitter
-  UCSR0B |= (1 << RXCIE0) | (1 << TXCIE0); // Enable receiver interrupt
+  UCSR0B |= (1 << RXCIE0); // Enable receiver interrupt
   UCSR0C = (1 << UCSZ01) | (1 << UCSZ00); // Set frame: 8data, 1 stp
 
 }
 
 ISR(ADC_vect){
-  data[index] = ADC + index*10;
+  data[index] = ADC;
   index++;
   if (index < 500) TIFR1 |= 0x01;
 }
