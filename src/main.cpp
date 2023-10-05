@@ -8,23 +8,19 @@ enum mode{
 
 uint16_t data[500];
 volatile uint16_t index;
+volatile char lastChar;
+volatile uint8_t sent;
 mode capMode;
 
-ISR(ADC_vect){
-  data[index] = ADC + index*10;
-  index++;
-  if (index < 500) TIFR1 |= 0x01;
-}
+
 void ADC_Init();
 void Timer1_Init();
 void USART_Init(uint64_t baud_rate, uint8_t double_speed);
 
 int main(){
 
-  //Debug
-  Serial.begin(9600);
-
   cli(); // disable global interrupts
+
   // Configuration
   PORTB = 0x00; // Set all ports to input
   DDRB |= (1<< PB5) | (1<<PB0); // Set PB5 and PB0 to output
@@ -40,34 +36,29 @@ int main(){
   capMode = NONE;
   index = 0;
   uint16_t i;
-  uint8_t *data2Send;
-
-  
+  lastChar = 0;
 
   while(1){ 
 
-    if (!reading){
-      while (!(UCSR0A & (1 << RXC0)));
-      if (UDR0 == '1'){
-        reading = 1;
-        capMode = VOLTAGE;
-        index = 0;
-        ADMUX &= ~(1 << MUX0);
-        TIFR1 |= 0x01;
-        PORTB |= (1<<PB5);
-      }
+    if (!(reading) && lastChar == '1'){
+      reading = 1;
+      capMode = VOLTAGE;
+      index = 0;
+      lastChar = 0;
+      ADMUX &= ~(1 << MUX0);
+      TIFR1 |= 0x01;
+      PORTB |= (1<<PB5);
     }
-    
     if (reading){
       if (index == 500){
-        // Serial.println("Sending data:");
+
         for(i = 0; i < 500; i++) {
-          while(UCSR0A&0x20 == 0);
-          while ( !( UCSR0A & (1<<UDRE0)) )
-          UDR0 = (uint8_t)(data[i] >> 8);
-          while ( !( UCSR0A & (1<<UDRE0)) )
-          UDR0 = (uint8_t)(data[i]);
+          while (!(UCSR0A & (1 << UDRE0)));
+          UDR0 =  '1';//(uint8_t)(data[i] >> 8);
+          while (!(UCSR0A & (1 << UDRE0)));
+          UDR0 =  '1';//(uint8_t)(data[i] >> 8);
         }
+
         index = 0;
         if (capMode == VOLTAGE){
           capMode = CURRENT;
@@ -151,33 +142,21 @@ void USART_Init(uint64_t baud_rate, uint8_t double_speed) {
   } else {
     ubrr = ((F_CPU + baud_rate * 8UL) / (baud_rate * 16UL) - 1);
   }
-
   UBRR0 = ubrr;
-  
 
   UCSR0B = 0;
   UCSR0B |= (1 << RXEN0) | (1 << TXEN0); // Enable receiver and transmitter
-  UCSR0B |= (1 << RXCIE0); // Enable receiver interrupt
-
-
+  UCSR0B |= (1 << RXCIE0) | (1 << TXCIE0); // Enable receiver interrupt
   UCSR0C = (1 << UCSZ01) | (1 << UCSZ00); // Set frame: 8data, 1 stp
 
 }
 
+ISR(ADC_vect){
+  data[index] = ADC + index*10;
+  index++;
+  if (index < 500) TIFR1 |= 0x01;
+}
 
-ISR(USART_RX_vect)
-{
-   char head_aux=head;
-   head_aux++;
-   if(head_aux==16) head_aux=0;
-   if(head_aux == tail) //verifica se RAM FIFO está cheia
-    {
-    head_aux = UDR0; //descarte do byte recebido (RAM FIFO cheia)
-    }
-   else
-    {
-    FIFO[head] = UDR0;  // lê byte recebido via serial e carrega na FIFO
-    head++;
-    if(head==16) head=0; // reset índice de cabeça (buffer circular)
-    }
+ISR(USART_RX_vect){
+  lastChar = UDR0;
 }
