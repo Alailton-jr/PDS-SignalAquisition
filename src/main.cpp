@@ -77,13 +77,9 @@ int main(){
 }
 
 /*
-  @brief Initialize ADC
+  @brief Initialize ADC to measure Voltage and Current at 6kHz
 */
 void ADC_Init(){
-
-  /*
-    ADC to measure Voltage and Current at 6kHz
-  */
 
   // ADMUX – ADC Multiplexer Selection Register
   ADMUX = 0x00; // Clear ADMUX Register
@@ -111,13 +107,9 @@ void ADC_Init(){
 }
 
 /*
-  @brief Initialize Timer1
+  @brief Initialize Timer1 and configure it to trigger ADC at overflow (6kHz)
 */
 void Timer1_Init(){
-
-  /*
-    Timer configuration to trigger ADC
-  */
 
   // TOP = OCR1A; Update of OCR1A at BOTTOM; TOV1 Flag Set on TOP
   TCCR1A = 0x00; // Clear TCCR1A Register
@@ -164,12 +156,14 @@ void USART_Init(uint64_t baud_rate, uint8_t double_speed) {
 
 }
 
+// Interrupt for ADC
 ISR(ADC_vect){
   data[index] = ADC;
   index++;
-  if (index < 500) TIFR1 |= 0x01;
+  if (index < 500) TIFR1 |= 0x01; // Clear Timer1 Overflow Flag
 }
 
+// Interrupt for USART
 ISR(USART_RX_vect){
   lastChar = UDR0;
 }
