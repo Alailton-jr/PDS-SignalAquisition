@@ -1,11 +1,16 @@
 #include <Arduino.h>
 
+
+/*
+  @brief Enum for all types of reading
+*/
 enum mode{
   NONE = 0x00,
   VOLTAGE = 0x01,
   CURRENT = 0x02,
 };
 
+// Global variables
 volatile uint16_t data[500];
 volatile uint16_t index = 0;
 volatile char lastChar = 0;
@@ -17,7 +22,6 @@ void USART_Init(uint64_t baud_rate, uint8_t double_speed);
 int main(){
 
   // Initialize
-
   cli(); // disable global interrupts
   PORTB = 0x00; // Set all ports to input
   DDRB = (1<< PB5); // Set PB5 and PB0 to output
