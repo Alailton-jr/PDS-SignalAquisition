@@ -1,35 +1,22 @@
-# ATMega328P ADC and UART Data Logger
+# AquisitionApp MATLAB Application
 
-This is a C code project for ADC and UART data logger in ATMega328P. The code reads analog data from an ADC and transmits it through UART. It is designed to measure voltage and current at 6kHz.
+## Description
+The AquisitionApp is a MATLAB application designed to interface with an Arduino board for data acquisition. It allows users to configure communication settings, acquire voltage and current data, and display the results in real-time.
 
 ## Features
-
-- Data logging of voltage and current measurements.
-- Usage of ADC for data acquisition.
-- UART communication for data transmission.
-- Written in C.
-- PlatformIO compatible.
+- Connection to Arduino board via a COM port
+- Configuration of communication settings (baud rate, data bits, stop bits)
+- Asynchronous acquisition of voltage and current data
+- Visualization of acquired data on plots
 
 ## Requirements
-
-- [PlatformIO](https://platformio.org/)
-
-## Installation
-
-1. Clone or download this project.
-2. Open the project folder in PlatformIO.
+- MATLAB (R2019b or later)
+- A computer with a COM port (for Arduino communication)
 
 ## Usage
-
-1. Configure your hardware setup to connect the ADC and UART.
-2. Build and upload the code to your microcontroller using PlatformIO.
-3. Monitor the data using a UART terminal program.
-
-## Configuration
-
-You may need to adjust the following settings in the code:
-
-- Baud rate for UART communication.
-- ADC channel and reference voltage settings.
-- Timer settings for data acquisition frequency.
-
+1. Launch MATLAB.
+2. Create an instance of the `AquisitionApp` class: 
+   ```matlab
+   x = AquisitionApp();
+   createComponents(x);
+   x.startupFcn();
