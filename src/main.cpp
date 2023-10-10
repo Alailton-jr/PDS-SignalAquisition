@@ -44,14 +44,14 @@ int main(){
       capMode = VOLTAGE;
       index = 0;
       lastChar = 0;
-      ADMUX |= (1 << MUX0); // Set ADC to measure voltage
-      ADMUX &= ~(1 << MUX1); // Set ADC to measure voltage
+      ADMUX &= 0xF0; // Set ADC to measure voltage on input ADC0
       TIFR1 |= 0x01; // Clear Timer1 Overflow Flag
       PORTB |= (1<<PB5); // Set PB5 to HIGH
     }
     if (reading){
+
       // Send data to serial
-      if (index == 500){
+      if (index == 500){ 
 
         for(i = 0; i < 500; i++) {
           // break data into 8-bit chunks and send it to the serial port
@@ -65,8 +65,7 @@ int main(){
         // Change mode to current
         if (capMode == VOLTAGE){
           capMode = CURRENT;
-          ADMUX &= ~(1 << MUX0); // Set ADC to measure current
-          ADMUX |= (1 << MUX1); // Set ADC to measure current
+          ADMUX |= (1 << MUX0); // Set ADC to measure Current on input ADC1
           TIFR1 |= 0x01;
         }
         // Stop reading
