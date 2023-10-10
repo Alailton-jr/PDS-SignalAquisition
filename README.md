@@ -35,6 +35,8 @@ This project combines Arduino and MATLAB to facilitate data acquisition, process
 
 1. Open the MATLAB application (`Matlab/`) and configure your communication settings (baud rate, data bits, and stop bits).
 
+![Example Image](Matlab/appGui.png)
+
 2. Establish a connection to the Arduino board using the "Abrir Comunicação" button.
 
 3. Set the desired sampling parameters, such as sampling rate and the number of data points.
