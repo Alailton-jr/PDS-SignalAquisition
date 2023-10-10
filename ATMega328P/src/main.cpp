@@ -40,11 +40,11 @@ int main(){
   // Main loop
   while(1){
     if (!(reading) && (lastChar == '1')){
-      reading = 1;
-      capMode = VOLTAGE;
-      index = 0;
-      lastChar = 0;
-      ADMUX &= 0xF0; // Set ADC to measure voltage on input ADC0
+      reading = 1; // Start reading and doesn't accept more '1' until it's finished
+      capMode = VOLTAGE; // First mode of capture is voltage
+      index = 0; // Reset index for data Array
+      lastChar = 0; // Reset lastChar
+      ADMUX &= 0xF0; // Set ADC to measure voltage on input ADC0 -> 0000
       TIFR1 |= 0x01; // Clear Timer1 Overflow Flag
       PORTB |= (1<<PB5); // Set PB5 to HIGH
     }
@@ -65,7 +65,7 @@ int main(){
         // Change mode to current
         if (capMode == VOLTAGE){
           capMode = CURRENT;
-          ADMUX |= (1 << MUX0); // Set ADC to measure Current on input ADC1
+          ADMUX |= (1 << MUX0); // Set ADC to measure Current on input ADC1 -> 0001
           TIFR1 |= 0x01;
         }
         // Stop reading

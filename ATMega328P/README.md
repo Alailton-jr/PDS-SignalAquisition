@@ -1,4 +1,4 @@
-# ADC and UART Data Logger
+# ATMega328P ADC and UART Data Logger
 
 This is a C code project for an ADC and UART data logger. The code reads analog data from an ADC and transmits it through UART. It is designed to measure voltage and current at 6kHz.
 
@@ -32,12 +32,4 @@ You may need to adjust the following settings in the code:
 - Baud rate for UART communication.
 - ADC channel and reference voltage settings.
 - Timer settings for data acquisition frequency.
-
-## Contributors
-
-- Alailton Alves
-
-## License
-
-This project is licensed under the [License Name].
 
